@@ -88,17 +88,23 @@ def checkIn(email, passwd, SCKEY):
         # 解析签到结果
         try:
             result = json.loads(checkin_response.text)
-            # 根据实际响应结构解析消息
-            content = result.get('msg', result.get('message', result.get('data', '签到操作完成')))
-            if isinstance(content, dict):
-                content = str(content)
+            # VRMoo返回的是任务信息，解析签到相关数据
+            if 'mission' in result:
+                mission = result['mission']
+                credit = mission.get('credit', '未知')
+                my_credit = mission.get('my_credit', '未知') 
+                date = mission.get('date', '未知')
+                content = f'VRMoo签到成功！获得积分: {credit}，当前总积分: {my_credit}，签到时间: {date}'
+            else:
+                content = f'VRMoo签到响应: {str(result)[:200]}'
             print(content)
-        except:
-            content = '签到请求已发送'
+        except Exception as e:
+            content = '签到请求已发送，但响应解析失败'
             if '成功' in checkin_response.text or 'success' in checkin_response.text.lower():
                 content = '签到成功'
             elif '已签' in checkin_response.text or '已完成' in checkin_response.text:
                 content = '今日已签到'
+            print(f'响应解析失败: {e}')
             print(content)
         
         # 进行推送
