@@ -48,6 +48,20 @@ jobs:
         env:
           VRMOO_INFO: ${{ secrets.VRMOO_INFO }}
         run: |
+          python3 ./vrmoo_checkin.py      - name: Run Ikuuu sign
+        env:
+          URL: ${{ secrets.URL }}
+          INFO: ${{ secrets.INFO }}
+        run: |
+          python3 ./main.py
+          
+      - name: Sleep between scripts
+        run: sleep 10
+          
+      - name: Run VRMoo sign
+        env:
+          VRMOO_INFO: ${{ secrets.VRMOO_INFO }}
+        run: |
           python3 ./vrmoo_checkin.py        env:
           URL: ${{ secrets.URL }}
           INFO: ${{ secrets.INFO }}
