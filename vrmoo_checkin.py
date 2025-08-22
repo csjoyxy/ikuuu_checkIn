@@ -14,12 +14,15 @@ msg_template = 'http://www.pushplus.plus/send?token={}&title=VRMoo签到&content
 
 header = {
     'origin': 'https://www.vrmoo.net',
-    'referer': 'https://www.vrmoo.net/',
+    'referer': 'https://www.vrmoo.net/gold',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'accept': 'application/json, text/javascript, */*; q=0.01',
-    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'accept-language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
     'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-    'x-requested-with': 'XMLHttpRequest'
+    'x-requested-with': 'XMLHttpRequest',
+    'sec-fetch-site': 'same-origin',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-dest': 'empty'
 }
 
 def checkIn(email, passwd, SCKEY):
@@ -40,7 +43,7 @@ def checkIn(email, passwd, SCKEY):
     
     # 签到数据
     checkin_data = {
-        'count': '9',
+        'count': '10',
         'paged': '1'
     }
     
@@ -93,10 +96,12 @@ def checkIn(email, passwd, SCKEY):
                 mission = result['mission']
                 credit = mission.get('credit', '未知')
                 my_credit = mission.get('my_credit', '未知') 
+                always = mission.get('always', '未知')
                 date = mission.get('date', '未知')
-                content = f'VRMoo签到成功！获得积分: {credit}，当前总积分: {my_credit}，签到时间: {date}'
+                content = f'VRMoo签到成功！获得积分: {credit}，当前总积分: {my_credit}，连续签到: {always}天，签到时间: {date}'
             else:
-                content = f'VRMoo签到响应: {str(result)[:200]}'
+                # 如果没有mission字段，可能是错误响应
+                content = f'VRMoo签到异常，响应: {str(result)[:200]}'
             print(content)
         except Exception as e:
             content = '签到请求已发送，但响应解析失败'
