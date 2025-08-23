@@ -41,12 +41,6 @@ def checkIn(email, passwd, SCKEY):
         'loginType': ''
     }
     
-    # 签到数据
-    checkin_data = {
-        'count': '10',
-        'paged': '1'
-    }
-    
     try:
         print(f'账户【{email}】进行登录...')
         
@@ -80,36 +74,42 @@ def checkIn(email, passwd, SCKEY):
                 requests.post(url=push_url)
             return
         
-        # 等待一下再签到
-        time.sleep(1)
+        # 动态签到数据 - 尝试多个可能的count值
+        today = time.strftime("%d", time.localtime())  # 获取今天是几号
+        possible_counts = [str(int(today)), '10', '11', '12', '9']  # 多个可能的count值
         
-        # 进行签到
-        print('开始签到...')
-        checkin_response = session.post(url=check_url, headers=auth_header, data=checkin_data)
-        print(f'签到响应: {checkin_response.text}')
+        success = False
+        for count_val in possible_counts:
+            checkin_data = {
+                'count': count_val,
+                'paged': '1'
+            }
+            
+            print(f'尝试签到参数 count={count_val}...')
+            checkin_response = session.post(url=check_url, headers=auth_header, data=checkin_data)
+            
+            try:
+                result = json.loads(checkin_response.text)
+                # 检查是否有有效的mission数据
+                if 'mission' in result and 'credit' in result['mission']:
+                    mission = result['mission']
+                    credit = mission.get('credit', '未知')
+                    my_credit = mission.get('my_credit', '未知') 
+                    always = mission.get('always', '未知')
+                    date = mission.get('date', '未知')
+                    content = f'VRMoo签到成功！获得积分: {credit}，当前总积分: {my_credit}，连续签到: {always}天，签到时间: {date}'
+                    print(content)
+                    success = True
+                    break
+                else:
+                    print(f'count={count_val} 响应异常: {str(result)[:100]}')
+                    continue
+            except Exception as e:
+                print(f'count={count_val} 解析失败: {e}')
+                continue
         
-        # 解析签到结果
-        try:
-            result = json.loads(checkin_response.text)
-            # VRMoo返回的是任务信息，解析签到相关数据
-            if 'mission' in result:
-                mission = result['mission']
-                credit = mission.get('credit', '未知')
-                my_credit = mission.get('my_credit', '未知') 
-                always = mission.get('always', '未知')
-                date = mission.get('date', '未知')
-                content = f'VRMoo签到成功！获得积分: {credit}，当前总积分: {my_credit}，连续签到: {always}天，签到时间: {date}'
-            else:
-                # 如果没有mission字段，可能是错误响应
-                content = f'VRMoo签到异常，响应: {str(result)[:200]}'
-            print(content)
-        except Exception as e:
-            content = '签到请求已发送，但响应解析失败'
-            if '成功' in checkin_response.text or 'success' in checkin_response.text.lower():
-                content = '签到成功'
-            elif '已签' in checkin_response.text or '已完成' in checkin_response.text:
-                content = '今日已签到'
-            print(f'响应解析失败: {e}')
+        if not success:
+            content = 'VRMoo签到失败：所有count参数都尝试过了'
             print(content)
         
         # 进行推送
