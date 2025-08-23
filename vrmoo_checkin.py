@@ -77,38 +77,29 @@ def checkIn(email, passwd, SCKEY):
         # 等待一下再签到
         time.sleep(1)
         
-        # 进行签到 - 使用正确的签到接口
+        # 进行签到 - 真正的签到接口不需要参数
         print('开始签到...')
-        checkin_data = {
-            'count': '10',
-            'paged': '1'
-        }
-        
-        checkin_response = session.post(url=check_url, headers=auth_header, data=checkin_data)
+        checkin_response = session.post(url=check_url, headers=auth_header)  # 不传递data参数
         print(f'签到响应: {checkin_response.text}')
         
         # 解析签到结果
         try:
             result = json.loads(checkin_response.text)
-            # 检查新的响应结构
+            # 新的响应结构：根级别有credit，mission里有详细信息
             if 'mission' in result and 'credit' in result:
-                # 新的响应格式：根级别有credit，mission里有详细信息
                 credit = result.get('credit', '未知')
                 mission = result.get('mission', {})
                 my_credit = mission.get('my_credit', '未知')
                 always = mission.get('always', '未知')
                 date = result.get('date', '未知')
                 content = f'VRMoo签到成功！获得积分: {credit}，当前总积分: {my_credit}，连续签到: {always}天，签到时间: {date}'
-            elif 'mission' in result:
-                # 旧的响应格式
-                mission = result['mission']
-                credit = mission.get('credit', '未知')
-                my_credit = mission.get('my_credit', '未知')
-                always = mission.get('always', '未知')
-                date = mission.get('date', '未知')
-                content = f'VRMoo签到成功！获得积分: {credit}，当前总积分: {my_credit}，连续签到: {always}天，签到时间: {date}'
             else:
-                content = f'VRMoo签到响应异常: {str(result)[:200]}'
+                # 检查是否有错误信息
+                error_msg = result.get('msg', result.get('message', ''))
+                if error_msg:
+                    content = f'VRMoo签到失败: {error_msg}'
+                else:
+                    content = f'VRMoo签到响应异常: {str(result)[:200]}'
             print(content)
         except Exception as e:
             content = '签到请求已发送，但响应解析失败'
@@ -116,6 +107,8 @@ def checkIn(email, passwd, SCKEY):
                 content = '签到成功'
             elif '已签' in checkin_response.text or '已完成' in checkin_response.text:
                 content = '今日已签到'
+            elif 'error' in checkin_response.text.lower():
+                content = '签到失败'
             print(f'响应解析失败: {e}')
             print(content)
         
