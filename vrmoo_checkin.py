@@ -1,30 +1,70 @@
-def vrmoo_checkin(sess, token):
-    SIGN_URL = "https://www.vrmoo.net/wp-json/b2/v1/userMission"
+import os
+import json
+import requests
 
+def sign_in(info):
+    name = info.get("name", "未知用户")
+    jwt_url = "https://vrmoo.com/api/user/jwt"
+    signin_url = "https://vrmoo.com/api/mission/checkin"
     headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json; charset=UTF-8",
-        "Origin": "https://www.vrmoo.net",
-        "Referer": "https://www.vrmoo.net/",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/116.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0",
+        "Content-Type": "application/json"
     }
 
-    # 设置 Cookie（必须）
-    sess.cookies.set("b2_token", token, domain="www.vrmoo.net", path="/")
+    # 登录获取 JWT
+    r = requests.post(jwt_url, json={"email": info["email"], "password": info["password"]}, headers=headers)
+    if r.status_code != 200 or "token" not in r.json():
+        return f"{name} 登录失败"
+
+    token = r.json()["token"]
+    headers["Authorization"] = f"Bearer {token}"
+
+    # 发起签到请求
+    r = requests.get(signin_url, headers=headers)
+    try:
+        res = r.json()
+    except Exception:
+        res = r.text.strip().strip('"')
+        if res.isdigit():
+            return f"{name} 今日已签到，获得积分：{res}"
+        return f"{name} 签到完成（原始返回：{res[:100]})"
+
+    if isinstance(res, dict) and "credit" in res and "mission" in res:
+        return f"{name} 签到成功，获得积分：{res['credit']}，任务：{res['mission']}"
+    return f"{name} 签到完成（返回内容异常）"
+
+def pushplus(content):
+    token = os.getenv("PUSHPLUS_TOKEN")
+    if not token:
+        return
+    requests.post("http://www.pushplus.plus/send", json={
+        "token": token,
+        "title": "VRMoo 签到结果",
+        "content": content
+    })
+
+def main():
+    raw = os.getenv("VRMOO_INFO")
+    if not raw:
+        print("未设置 VRMOO_INFO")
+        return
 
     try:
-        r = sess.post(SIGN_URL, headers=headers, json={}, timeout=15)
-        r.raise_for_status()
-        data = r.json()
+        accounts = json.loads(raw)
+    except Exception:
+        print("VRMOO_INFO 格式错误")
+        return
 
-        if "mission" in data and "credit" in data:
-            print(f"✅ 签到成功！获得积分：{data['credit']}，当前总积分：{data['my_credit']}")
-            print(f"📅 签到日期：{data['mission']['date']}，连续签到：{data['mission']['mission']['days']} 天")
-        elif isinstance(data, str) and data == "1":
-            print("⚠️ 返回 '1'，但未真正签到成功。可能请求体格式不对或 Cookie 未设置。")
-        else:
-            print("⚠️ 请求成功但未触发签到逻辑，可能已经签到过了或 token 无效")
-            print("返回内容：", data)
+    if not isinstance(accounts, list):
+        accounts = [accounts]
 
-    except Exception as e:
-        print("❌ 签到失败：", str(e))
+    results = []
+    for info in accounts:
+        result = sign_in(info)
+        print(result)
+        results.append(result)
+
+    pushplus("\n".join(results))
+
+if __name__ == "__main__":
+    main()
