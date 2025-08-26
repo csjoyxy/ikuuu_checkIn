@@ -1,99 +1,30 @@
-import os
-import time
-import json
-import requests
-from urllib.parse import quote
+def vrmoo_checkin(sess, token):
+    SIGN_URL = "https://www.vrmoo.net/wp-json/b2/v1/userMission"
 
-BASE = "https://www.vrmoo.net"
-LOGIN_URL = f"{BASE}/wp-json/jwt-auth/v1/token"
-SIGN_URL = f"{BASE}/wp-json/b2/v1/userMission"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-
-def push_plus(token, content):
-    if not token:
-        return
-    url = f"http://www.pushplus.plus/send?token={token}&title={quote('VRMoo签到')}&content={quote(content)}"
-    try:
-        r = requests.post(url, timeout=10)
-        print("推送成功" if r.status_code == 200 else f"推送失败：HTTP {r.status_code}")
-    except Exception as e:
-        print(f"推送异常：{e}")
-
-def login_get_token(sess, email, password):
     headers = {
-        "Origin": BASE,
-        "Referer": f"{BASE}/",
-        "User-Agent": UA,
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-    }
-    data = {
-        "username": email,
-        "password": password
-    }
-    r = sess.post(LOGIN_URL, headers=headers, data=data, timeout=15)
-    j = r.json()
-    token = j.get("token")
-    if not token:
-        raise RuntimeError(f"登录失败：{j}")
-    print("登录成功")
-    return token
-
-def sign_in(sess, token):
-    sess.headers.update({
         "Authorization": f"Bearer {token}",
-        "User-Agent": UA,
-        "Origin": BASE,
-        "Referer": f"{BASE}/"
-    })
+        "Content-Type": "application/json; charset=UTF-8",
+        "Origin": "https://www.vrmoo.net",
+        "Referer": "https://www.vrmoo.net/",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/116.0.0.0 Safari/537.36"
+    }
+
+    # 设置 Cookie（必须）
     sess.cookies.set("b2_token", token, domain="www.vrmoo.net", path="/")
-    headers = {"Content-Type": "application/json; charset=UTF-8"}
-    r = sess.post(SIGN_URL, headers=headers, json={}, timeout=15)
-    text = r.text.strip()
-    print(f"签到响应：{text}")
+
     try:
-        res = r.json()
-        if "credit" in res and "mission" in res:
-            credit = res.get("credit", 0)
-            my_credit = res["mission"].get("my_credit", "未知")
-            date = res.get("date", "未知")
-            return f"签到成功：+{credit}，总积分 {my_credit}（时间：{date}）"
+        r = sess.post(SIGN_URL, headers=headers, json={}, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+
+        if "mission" in data and "credit" in data:
+            print(f"✅ 签到成功！获得积分：{data['credit']}，当前总积分：{data['my_credit']}")
+            print(f"📅 签到日期：{data['mission']['date']}，连续签到：{data['mission']['mission']['days']} 天")
+        elif isinstance(data, str) and data == "1":
+            print("⚠️ 返回 '1'，但未真正签到成功。可能请求体格式不对或 Cookie 未设置。")
         else:
-            return res.get("msg") or res.get("message") or "今日已签到或无积分变化"
-    except Exception:
-        if text.isdigit():
-            return f"今日已签到，获得积分：{text}"
-        return f"签到完成（原始返回：{text[:100]})"
+            print("⚠️ 请求成功但未触发签到逻辑，可能已经签到过了或 token 无效")
+            print("返回内容：", data)
 
-def check_in_one(email, password, push_token):
-    sess = requests.Session()
-    try:
-        print(f"\n处理账户：{email}")
-        token = login_get_token(sess, email, password)
-        result = sign_in(sess, token)
-        print(result)
-        push_plus(push_token, result)
     except Exception as e:
-        err = f"签到失败：{e}"
-        print(err)
-        push_plus(push_token, err)
-    finally:
-        sess.close()
-
-def main():
-    info = os.getenv("VRMOO_INFO", "").strip()
-    if not info:
-        print("❌ 未设置 VRMOO_INFO 环境变量")
-        return
-    users = [u for u in info.split(",") if u.strip()]
-    for u in users:
-        parts = [p.strip() for p in u.split("<split>")]
-        if len(parts) < 2:
-            print(f"格式错误：{u}")
-            continue
-        email, password = parts[0], parts[1]
-        push_token = parts[2] if len(parts) > 2 else ""
-        check_in_one(email, password, push_token)
-        time.sleep(3)
-
-if __name__ == "__main__":
-    main()
+        print("❌ 签到失败：", str(e))
