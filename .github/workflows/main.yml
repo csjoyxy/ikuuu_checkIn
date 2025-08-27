@@ -48,4 +48,8 @@ jobs:
         env:
           VRMOO_INFO: ${{ secrets.VRMOO_INFO }}
         run: |
-          python3 ./vrmoo_checkin.py
+          python3 ./vrmoo_checkin.py        env:
+          URL: ${{ secrets.URL }}
+          INFO: ${{ secrets.INFO }}
+        run: |
+          python3 ./main.py
