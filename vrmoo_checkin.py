@@ -48,9 +48,16 @@ def check_in(email, password, push_token):
         })
         sess.cookies.set("b2_token", token, domain="www.vrmoo.net", path="/")
 
+        # 🔹 新增：模拟进入首页，触发初始化（避免第一次登录需要手动关弹窗）
+        try:
+            init_url = f"{BASE}/wp-json/b2/v1/getUserMission"
+            sess.get(init_url, timeout=10)
+        except Exception as e:
+            print(f"初始化请求失败（可忽略）：{e}")
+
         # 调用签到接口
         headers_sign = {"Content-Type": "application/json; charset=UTF-8"}
-        r = sess.post(SIGN_URL, headers=headers_sign, timeout=15)
+        r = sess.post(SIGN_URL, headers=headers_sign, json={}, timeout=15)
         print(f"签到响应：{r.text}")
         try:
             res = r.json()
@@ -59,7 +66,11 @@ def check_in(email, password, push_token):
             else:
                 content = res.get("msg") or res.get("message") or "今日已签到或无积分变化"
         except Exception:
-            content = "签到完成（无法解析返回）"
+            text = r.text.strip().strip('"')
+            if text.isdigit():
+                content = f"今日已签到，获得积分：{text}"
+            else:
+                content = f"签到完成（原始返回：{text[:100]})"
 
         print(content)
         push_plus(push_token, content)
