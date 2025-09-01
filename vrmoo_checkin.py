@@ -48,10 +48,10 @@ def check_in(email, password, push_token):
         })
         sess.cookies.set("b2_token", token, domain="www.vrmoo.net", path="/")
 
-        # 🔹 新增：模拟进入首页，触发初始化（避免第一次登录需要手动关弹窗）
+        # 🔹 新增：模拟浏览器初始化，避免第一次运行无法签到
         try:
-            init_url = f"{BASE}/wp-json/b2/v1/getUserMission"
-            sess.get(init_url, timeout=10)
+            sess.get(f"{BASE}/wp-json/b2/v1/getUserInfo", timeout=10)
+            sess.get(f"{BASE}/wp-json/b2/v1/getUserMission", timeout=10)
         except Exception as e:
             print(f"初始化请求失败（可忽略）：{e}")
 
