@@ -1,6 +1,5 @@
 import os
 import time
-import json
 import requests
 from urllib.parse import quote
 
@@ -19,68 +18,56 @@ def push_plus(token, content):
     except Exception as e:
         print(f"推送异常：{e}")
 
-def check_in(email, password, push_token):
+def login_and_get_cookies(email, password):
     sess = requests.Session()
+    headers_login = {
+        "Origin": BASE,
+        "Referer": f"{BASE}/",
+        "User-Agent": UA,
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    }
+    data = {"username": email, "password": password}
+    r = sess.post(LOGIN_URL, headers=headers_login, data=data, timeout=15)
     try:
-        # 登录获取 JWT
-        headers_login = {
-            "Origin": BASE,
-            "Referer": f"{BASE}/",
-            "User-Agent": UA,
-            "Accept": "application/json, text/plain, */*",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        }
-        data = {"username": email, "password": password}
-        r = sess.post(LOGIN_URL, headers=headers_login, data=data, timeout=15)
         j = r.json()
-        token = j.get("token")
-        if not token:
-            raise RuntimeError(f"登录失败：{j}")
-        print("登录成功")
+    except Exception:
+        raise RuntimeError(f"登录返回异常：{r.text}")
 
-        # 设置鉴权头和 b2_token
-        sess.headers.update({
-            "Authorization": f"Bearer {token}",
-            "User-Agent": UA,
-            "Accept": "application/json, text/plain, */*",
-            "Origin": BASE,
-            "Referer": f"{BASE}/",
-        })
-        sess.cookies.set("b2_token", token, domain="www.vrmoo.net", path="/")
+    if "token" not in j:
+        raise RuntimeError(f"登录失败：{j}")
 
-        # 🔹 新增：模拟浏览器初始化，避免第一次运行无法签到
-        try:
-            sess.get(f"{BASE}/wp-json/b2/v1/getUserInfo", timeout=10)
-            sess.get(f"{BASE}/wp-json/b2/v1/getUserMission", timeout=10)
-        except Exception as e:
-            print(f"初始化请求失败（可忽略）：{e}")
+    print("登录成功")
 
-        # 调用签到接口
-        headers_sign = {"Content-Type": "application/json; charset=UTF-8"}
-        r = sess.post(SIGN_URL, headers=headers_sign, json={}, timeout=15)
-        print(f"签到响应：{r.text}")
-        try:
-            res = r.json()
-            if "credit" in res and int(res.get("credit", 0)) > 0:
-                content = f"签到成功，本次 +{res['credit']}，总积分 {res['mission']['my_credit']}"
-            else:
-                content = res.get("msg") or res.get("message") or "今日已签到或无积分变化"
-        except Exception:
-            text = r.text.strip().strip('"')
-            if text.isdigit():
-                content = f"今日已签到，获得积分：{text}"
-            else:
-                content = f"签到完成（原始返回：{text[:100]})"
+    # 从响应和会话中提取所有 Cookie
+    cookie_dict = requests.utils.dict_from_cookiejar(sess.cookies)
+    cookie_header = "; ".join([f"{k}={v}" for k, v in cookie_dict.items()])
+    return cookie_header
 
-        print(content)
-        push_plus(push_token, content)
+def check_in(cookie_header, push_token):
+    headers_sign = {
+        "User-Agent": UA,
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json; charset=UTF-8",
+        "Cookie": cookie_header
+    }
+    r = requests.post(SIGN_URL, headers=headers_sign, json={}, timeout=15)
+    print(f"签到响应：{r.text}")
+    try:
+        res = r.json()
+        if "credit" in res and int(res.get("credit", 0)) > 0:
+            content = f"签到成功，本次 +{res['credit']}，总积分 {res['mission']['my_credit']}"
+        else:
+            content = res.get("msg") or res.get("message") or "今日已签到或无积分变化"
+    except Exception:
+        text = r.text.strip().strip('"')
+        if text.isdigit():
+            content = f"今日已签到，获得积分：{text}"
+        else:
+            content = f"签到完成（原始返回：{text[:100]})"
 
-    except Exception as e:
-        err = f"签到失败：{e}"
-        print(err)
-        push_plus(push_token, err)
-    finally:
-        sess.close()
+    print(content)
+    push_plus(push_token, content)
 
 if __name__ == "__main__":
     info = os.environ.get("VRMOO_INFO", "").strip()
@@ -95,5 +82,11 @@ if __name__ == "__main__":
         email, password = parts[0], parts[1]
         push_token = parts[2] if len(parts) > 2 else ""
         print(f"\n处理账户：{email}")
-        check_in(email, password, push_token)
+        try:
+            cookie_header = login_and_get_cookies(email, password)
+            check_in(cookie_header, push_token)
+        except Exception as e:
+            err = f"签到失败：{e}"
+            print(err)
+            push_plus(push_token, err)
         time.sleep(3)
